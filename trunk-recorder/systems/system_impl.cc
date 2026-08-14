@@ -1,5 +1,6 @@
 #include "system_impl.h"
 #include "system.h"
+#include <cmath>
 
 System *System::make(int sys_num) {
   return (System *)new System_impl(sys_num);
@@ -610,6 +611,11 @@ int System_impl::get_decode_rate() {
 }
 
 void System_impl::add_signal_pwr_sample(double pwr) {
+  // The underlying power probe reports -inf (log10(0)) until its first real
+  // samples arrive; skip those so one early reading can't poison the average.
+  if (!std::isfinite(pwr)) {
+    return;
+  }
   signal_pwr_total += pwr;
   signal_pwr_samples++;
 }

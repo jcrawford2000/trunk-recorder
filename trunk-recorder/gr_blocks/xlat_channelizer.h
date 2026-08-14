@@ -8,6 +8,7 @@
 #include "./freq_xlating_fft_filter.h"
 #include "./pwr_squelch_cc.h"
 #include <gnuradio/blocks/copy.h>
+#include <gnuradio/blocks/null_sink.h>
 #include <gnuradio/digital/fll_band_edge_cc.h>
 #include <gnuradio/filter/fft_filter_ccc.h>
 #include <gnuradio/filter/fft_filter_ccf.h>
@@ -92,6 +93,12 @@ private:
   std::vector<float> cutoff_filter_coeffs;
 
   gr::analog::pwr_squelch_cc::sptr squelch;
+  // Trunked recorders don't wire `squelch` into the signal path (see the
+  // constructor), so its get_pwr() is never meaningful for them. This second
+  // instance is always connected in parallel purely to measure channel power;
+  // its threshold/gate/mute state are unused and it never gates any audio.
+  gr::analog::pwr_squelch_cc::sptr pwr_probe;
+  gr::blocks::null_sink::sptr pwr_probe_sink;
   gr::digital::fll_band_edge_cc::sptr fll_band_edge;
   gr::blocks::rms_agc::sptr rms_agc;
 

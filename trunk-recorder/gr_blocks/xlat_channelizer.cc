@@ -119,6 +119,9 @@ xlat_channelizer::xlat_channelizer(double input_rate, int samples_per_symbol, do
   // reverse squelch. If the power is then BELOW a threshold, open the squelch.
 
   squelch = gr::analog::pwr_squelch_cc::make(squelch_db, 0.0001, 0, true);
+  // Threshold/gate here are irrelevant: only get_pwr() is ever read on this instance.
+  pwr_probe = gr::analog::pwr_squelch_cc::make(-100.0, 0.0001, 0, false);
+  pwr_probe_sink = gr::blocks::null_sink::make(sizeof(gr_complex));
 
   rms_agc = gr::blocks::rms_agc::make(0.45, 0.85);
   if (d_use_fll) {
@@ -144,23 +147,34 @@ xlat_channelizer::xlat_channelizer(double input_rate, int samples_per_symbol, do
 
   connect(self(), 0, freq_xlat, 0);
   connect(freq_xlat, 0, channel_lpf, 0);
+
+  // pwr_probe taps the channel in parallel (fan-out) — its output is unused
+  // downstream, so it never affects the primary decode signal path below.
+  gr::basic_block_sptr pwr_tap_source;
+
   if (d_use_squelch) {
     BOOST_LOG_TRIVIAL(info) << "Conventional - with Squelch";
     if (arb_rate == 1.0) {
       connect(channel_lpf, 0, squelch, 0);
+      pwr_tap_source = channel_lpf;
     } else {
       connect(channel_lpf, 0, arb_resampler, 0);
       connect(arb_resampler, 0, squelch, 0);
+      pwr_tap_source = arb_resampler;
     }
     connect(squelch, 0, rms_agc, 0);
   } else {
     if (arb_rate == 1.0) {
       connect(channel_lpf, 0, rms_agc, 0);
+      pwr_tap_source = channel_lpf;
     } else {
       connect(channel_lpf, 0, arb_resampler, 0);
       connect(arb_resampler, 0, rms_agc, 0);
+      pwr_tap_source = arb_resampler;
     }
   }
+  connect(pwr_tap_source, 0, pwr_probe, 0);
+  connect(pwr_probe, 0, pwr_probe_sink, 0);
 
   if (d_use_fll) {
     connect(rms_agc, 0, fll_band_edge, 0);
@@ -190,7 +204,7 @@ double xlat_channelizer::get_pwr() {
   if (d_use_squelch) {
     return squelch->get_pwr();
   } else {
-    return DB_UNSET;
+    return pwr_probe->get_pwr();
   }
 }
 
