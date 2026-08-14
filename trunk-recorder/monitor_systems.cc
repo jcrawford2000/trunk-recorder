@@ -481,7 +481,7 @@ void handle_call_grant(TrunkMessage message, System *sys, bool grant_message, Co
                   std::string loghdr = log_header(sys->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), message.freq);
                   double call_sys_pwr = call->get_system()->get_signal_pwr();
                   double sys_pwr = sys->get_signal_pwr();
-                  BOOST_LOG_TRIVIAL(info) << loghdr << "Duplicate Grant Detected.  Original System:" << call->get_system()->get_short_name() << "(Signal Pwr:" << call_sys_pwr << ") New System:" << sys->get_short_name() << "(Signal Pwr:" << sys_pwr << ")";
+                  BOOST_LOG_TRIVIAL(trace) << loghdr << "Duplicate Grant Detected.  Original System:" << call->get_system()->get_short_name() << "(Signal Pwr:" << call_sys_pwr << ") New System:" << sys->get_short_name() << "(Signal Pwr:" << sys_pwr << ")";
                   if (sys_pwr > call_sys_pwr) {
                     BOOST_LOG_TRIVIAL(info) << loghdr << "New Call System " << sys->get_short_name() << " has stronger signal (" << sys_pwr << ") than Original Call System " << call->get_system()->get_short_name() << " (" << call_sys_pwr << "). Superseding Grant";
                     superseding_grant = true;
