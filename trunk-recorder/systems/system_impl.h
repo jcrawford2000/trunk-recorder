@@ -75,6 +75,7 @@ public:
   int bcfy_system_id;
   int message_count;
   int decode_rate;
+  double signal_pwr;
   int retune_attempts;
   time_t last_message_time;
   std::string bandplan;
@@ -262,6 +263,9 @@ public:
   void set_message_count(int count) override;
   int get_decode_rate() override;
   void set_decode_rate(int rate) override;
+  void add_signal_pwr_sample(double pwr) override;
+  double get_signal_pwr() override;
+  void calc_signal_pwr() override;
   void add_control_channel(double channel) override;
   double get_next_control_channel() override;
   double get_current_control_channel() override;
@@ -352,5 +356,8 @@ private:
   bool d_fsync_enabled;
   bool d_star_enabled;
   bool d_tps_enabled;
+
+  double signal_pwr_total;
+  int signal_pwr_samples;
 };
 #endif
