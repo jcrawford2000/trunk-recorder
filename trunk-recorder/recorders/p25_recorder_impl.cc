@@ -55,7 +55,9 @@ void p25_recorder_impl::initialize(Source *src) {
     this->set_enable_audio_streaming(config->enable_audio_streaming);
   }
 
-  prefilter = xlat_channelizer::make(input_rate, channelizer::phase1_samples_per_symbol, channelizer::phase1_symbol_rate, xlat_channelizer::channel_bandwidth, center_freq, conventional);
+  // measure_pwr=true: get_pwr() needs a real reading on trunked P25 calls too, for
+  // multiSite signal-power arbitration (see monitor_systems.cc handle_call_grant()).
+  prefilter = xlat_channelizer::make(input_rate, channelizer::phase1_samples_per_symbol, channelizer::phase1_symbol_rate, xlat_channelizer::channel_bandwidth, center_freq, conventional, xlat_channelizer::default_excess_bw, true, true);
   // initialize_prefilter();
   //  initialize_p25();
 
