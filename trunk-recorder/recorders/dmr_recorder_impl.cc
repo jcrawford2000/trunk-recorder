@@ -45,11 +45,14 @@ void dmr_recorder_impl::initialize(Source *src) {
     slots[i].active = false;
   }
 
+  // measure_pwr=true: get_pwr() needs a real reading on trunked DMR calls too, for
+  // multiSite signal-power arbitration (see monitor_systems.cc handle_call_grant()).
   prefilter = xlat_channelizer::make(input_rate,
                                      channelizer::phase1_samples_per_symbol,
                                      channelizer::phase1_symbol_rate,
                                      xlat_channelizer::channel_bandwidth,
-                                     center_freq, conventional);
+                                     center_freq, conventional,
+                                     xlat_channelizer::default_excess_bw, true, true);
 
   // FSK4 demod chain — locked at Phase 1 rates because DMR voice is always 4-FSK
   // at 4800 sym/s.

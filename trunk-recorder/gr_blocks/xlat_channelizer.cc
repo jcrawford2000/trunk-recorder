@@ -1,8 +1,8 @@
 #include "xlat_channelizer.h"
 
-xlat_channelizer::sptr xlat_channelizer::make(double input_rate, int samples_per_symbol, double symbol_rate, double bandwidth, double center_freq, bool use_squelch, double excess_bw, bool use_fll) {
+xlat_channelizer::sptr xlat_channelizer::make(double input_rate, int samples_per_symbol, double symbol_rate, double bandwidth, double center_freq, bool use_squelch, double excess_bw, bool use_fll, bool measure_pwr) {
 
-  return gnuradio::get_initial_sptr(new xlat_channelizer(input_rate, samples_per_symbol, symbol_rate, bandwidth, center_freq, use_squelch, excess_bw, use_fll));
+  return gnuradio::get_initial_sptr(new xlat_channelizer(input_rate, samples_per_symbol, symbol_rate, bandwidth, center_freq, use_squelch, excess_bw, use_fll, measure_pwr));
 }
 
 const int xlat_channelizer::smartnet_samples_per_symbol;
@@ -40,7 +40,7 @@ xlat_channelizer::DecimSettings xlat_channelizer::get_decim(long speed) {
   return decim_settings;
 }
 
-xlat_channelizer::xlat_channelizer(double input_rate, int samples_per_symbol, double symbol_rate, double bandwidth, double center_freq, bool use_squelch, double excess_bw, bool use_fll)
+xlat_channelizer::xlat_channelizer(double input_rate, int samples_per_symbol, double symbol_rate, double bandwidth, double center_freq, bool use_squelch, double excess_bw, bool use_fll, bool measure_pwr)
     : gr::hier_block2("xlat_channelizer_ccf",
                       gr::io_signature::make(1, 1, sizeof(gr_complex)),
                       gr::io_signature::make(1, 1, sizeof(gr_complex))),
@@ -50,7 +50,8 @@ xlat_channelizer::xlat_channelizer(double input_rate, int samples_per_symbol, do
       d_samples_per_symbol(samples_per_symbol),
       d_symbol_rate(symbol_rate),
       d_use_squelch(use_squelch),
-      d_use_fll(use_fll) {
+      d_use_fll(use_fll),
+      d_measure_pwr(measure_pwr) {
 
   long channel_rate = d_symbol_rate * d_samples_per_symbol;
   // long if_rate = 12500;
@@ -119,6 +120,15 @@ xlat_channelizer::xlat_channelizer(double input_rate, int samples_per_symbol, do
   // reverse squelch. If the power is then BELOW a threshold, open the squelch.
 
   squelch = gr::analog::pwr_squelch_cc::make(squelch_db, 0.0001, 0, true);
+  // Only voice recorders that need get_pwr() for trunked calls (see multiSite
+  // signal-power arbitration) opt into this. It's skipped for control-channel
+  // decoders (always-on, running continuously) so they don't pay for an extra
+  // block they have no use for. Threshold/gate below are irrelevant either way:
+  // only get_pwr() is ever read on this instance.
+  if (!d_use_squelch && d_measure_pwr) {
+    pwr_probe = gr::analog::pwr_squelch_cc::make(-100.0, 0.0001, 0, false);
+    pwr_probe_sink = gr::blocks::null_sink::make(sizeof(gr_complex));
+  }
 
   rms_agc = gr::blocks::rms_agc::make(0.45, 0.85);
   if (d_use_fll) {
@@ -144,22 +154,36 @@ xlat_channelizer::xlat_channelizer(double input_rate, int samples_per_symbol, do
 
   connect(self(), 0, freq_xlat, 0);
   connect(freq_xlat, 0, channel_lpf, 0);
+
+  // When present, pwr_probe taps the channel in parallel (fan-out) — its
+  // output is unused downstream, so it never affects the primary decode
+  // signal path below.
+  gr::basic_block_sptr pwr_tap_source;
+
   if (d_use_squelch) {
     BOOST_LOG_TRIVIAL(info) << "Conventional - with Squelch";
     if (arb_rate == 1.0) {
       connect(channel_lpf, 0, squelch, 0);
+      pwr_tap_source = channel_lpf;
     } else {
       connect(channel_lpf, 0, arb_resampler, 0);
       connect(arb_resampler, 0, squelch, 0);
+      pwr_tap_source = arb_resampler;
     }
     connect(squelch, 0, rms_agc, 0);
   } else {
     if (arb_rate == 1.0) {
       connect(channel_lpf, 0, rms_agc, 0);
+      pwr_tap_source = channel_lpf;
     } else {
       connect(channel_lpf, 0, arb_resampler, 0);
       connect(arb_resampler, 0, rms_agc, 0);
+      pwr_tap_source = arb_resampler;
     }
+  }
+  if (pwr_probe) {
+    connect(pwr_tap_source, 0, pwr_probe, 0);
+    connect(pwr_probe, 0, pwr_probe_sink, 0);
   }
 
   if (d_use_fll) {
@@ -189,6 +213,8 @@ bool xlat_channelizer::is_squelched() {
 double xlat_channelizer::get_pwr() {
   if (d_use_squelch) {
     return squelch->get_pwr();
+  } else if (pwr_probe) {
+    return pwr_probe->get_pwr();
   } else {
     return DB_UNSET;
   }

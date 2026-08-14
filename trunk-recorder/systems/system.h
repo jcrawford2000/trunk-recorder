@@ -179,6 +179,9 @@ public:
   virtual void set_message_count(int count) = 0;
   virtual void set_decode_rate(int rate) = 0;
   virtual int get_decode_rate() = 0;
+  virtual void add_signal_pwr_sample(double pwr) = 0;
+  virtual double get_signal_pwr() = 0;
+  virtual void calc_signal_pwr() = 0;
   virtual void add_channel(double channel) = 0;
   virtual void add_conventional_recorder(analog_recorder_sptr rec) = 0;
   virtual void add_conventionalSIGMF_recorder(sigmf_recorder_sptr rec) = 0;

@@ -1,5 +1,6 @@
 #include "system_impl.h"
 #include "system.h"
+#include <cmath>
 
 System *System::make(int sys_num) {
   return (System *)new System_impl(sys_num);
@@ -208,6 +209,11 @@ System_impl::System_impl(int sys_num) {
   decode_rate = 0;
   dmr_rest_lcn = -1;
   dmr_variant = "";
+  // -9999 is a sentinel meaning "no voice-channel signal power samples yet";
+  // it is always weaker than a real reading so a site with no data never outranks one that has data.
+  signal_pwr = -9999;
+  signal_pwr_total = 0;
+  signal_pwr_samples = 0;
   msg_queue = gr::msg_queue::make(100);
   audio_postprocess_enabled = false;
   audio_highpass_hz = 0;
@@ -602,6 +608,31 @@ void System_impl::set_decode_rate(int rate) {
 
 int System_impl::get_decode_rate() {
   return decode_rate;
+}
+
+void System_impl::add_signal_pwr_sample(double pwr) {
+  // The underlying power probe reports -inf (log10(0)) until its first real
+  // samples arrive; skip those so one early reading can't poison the average.
+  if (!std::isfinite(pwr)) {
+    return;
+  }
+  signal_pwr_total += pwr;
+  signal_pwr_samples++;
+}
+
+double System_impl::get_signal_pwr() {
+  return signal_pwr;
+}
+
+// Called periodically (see check_message_count()) to roll the accumulated samples into an average.
+// If no calls were actively recording on this system since the last call, the previous average is kept
+// rather than reset to the sentinel, since the sentinel value is not a plausible dropout reading.
+void System_impl::calc_signal_pwr() {
+  if (signal_pwr_samples > 0) {
+    signal_pwr = signal_pwr_total / signal_pwr_samples;
+  }
+  signal_pwr_total = 0;
+  signal_pwr_samples = 0;
 }
 
 void System_impl::add_control_channel(double control_channel) {

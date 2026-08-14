@@ -38,11 +38,11 @@ bool start_recorder(Call *call, TrunkMessage message, Config &config, System *sy
   Recorder *debug_recorder;
   Recorder *sigmf_recorder;
 
-  if (!talkgroup){
-    BOOST_FOREACH (auto &TGID, sys->get_talkgroup_patch(call->get_talkgroup())) {  //for each talkgroup in the patch
-      if (sys->find_talkgroup(TGID) != NULL){  //if the patched talkgroup is known
+  if (!talkgroup) {
+    BOOST_FOREACH (auto &TGID, sys->get_talkgroup_patch(call->get_talkgroup())) { // for each talkgroup in the patch
+      if (sys->find_talkgroup(TGID) != NULL) {                                    // if the patched talkgroup is known
         override_record_unknown = true;
-        std::string loghdr = log_header( call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
+        std::string loghdr = log_header(call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
         BOOST_LOG_TRIVIAL(info) << loghdr << "\u001b[33mEnabling recording of TG not in Talkgroup File due to active supergroup patch\u001b[0m ";
       }
     }
@@ -52,7 +52,7 @@ bool start_recorder(Call *call, TrunkMessage message, Config &config, System *sy
     call->set_state(MONITORING);
     call->set_monitoring_state(UNKNOWN_TG);
     if (sys->get_hideUnknown() == false) {
-      std::string loghdr = log_header( call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
+      std::string loghdr = log_header(call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
       BOOST_LOG_TRIVIAL(info) << loghdr << "\u001b[33mNot Recording: TG not in Talkgroup File\u001b[0m ";
     }
     return false;
@@ -111,7 +111,7 @@ bool start_recorder(Call *call, TrunkMessage message, Config &config, System *sy
           recorder = source->get_digital_recorder(talkgroup, priority, call);
         }
       } else {
-        std::string loghdr = log_header( call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
+        std::string loghdr = log_header(call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
         BOOST_LOG_TRIVIAL(info) << loghdr << "TG not in Talkgroup File ";
 
         // A talkgroup was not found from the talkgroup file.
@@ -183,7 +183,7 @@ bool start_recorder(Call *call, TrunkMessage message, Config &config, System *sy
   if (!source_found) {
     call->set_state(MONITORING);
     call->set_monitoring_state(NO_SOURCE);
-    std::string loghdr = log_header( call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
+    std::string loghdr = log_header(call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
     BOOST_LOG_TRIVIAL(error) << loghdr << "\u001b[36mNot Recording: no source covering Freq\u001b[0m";
     return false;
   }
@@ -196,13 +196,13 @@ void print_status(std::vector<Source *> &sources, std::vector<System *> &systems
   for (vector<Call *>::iterator it = calls.begin(); it != calls.end(); it++) {
     Call *call = *it;
     Recorder *recorder = call->get_recorder();
-    std::string loghdr = log_header( call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
+    std::string loghdr = log_header(call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
     if (call->get_state() == MONITORING) {
       BOOST_LOG_TRIVIAL(info) << loghdr << "Elapsed: " << std::setw(4) << call->elapsed() << " State: " << format_state(call->get_state(), call->get_monitoring_state());
     } else {
-      if (call->is_conventional() ) {
+      if (call->is_conventional()) {
         bool is_enabled = call->get_recorder()->is_enabled();
-         BOOST_LOG_TRIVIAL(info) << loghdr << "Elapsed: " << std::setw(4) << call->elapsed() << " State: " << format_state(call->get_state()) << " Enabled: " << is_enabled;
+        BOOST_LOG_TRIVIAL(info) << loghdr << "Elapsed: " << std::setw(4) << call->elapsed() << " State: " << format_state(call->get_state()) << " Enabled: " << is_enabled;
       } else {
         BOOST_LOG_TRIVIAL(info) << loghdr << "Elapsed: " << std::setw(4) << call->elapsed() << " State: " << format_state(call->get_state());
       }
@@ -400,8 +400,8 @@ void handle_call_grant(TrunkMessage message, System *sys, bool grant_message, Co
   Call *original_call;
 
   /* Notes: it is possible for 2 Calls to exist for the same talkgroup on different freq. This happens when a Talkgroup starts on a freq
-  that current recorder can't retune to. In this case, the current orig Talkgroup reocrder will keep going on the old freq, while a new
-  recorder is start on a source that can cover that freq. This makes sure any of the remaining transmission that it is in the buffer
+  that current recorder can't retune to. In this case, the current orig Talkgroup recorder will keep going on the old freq, while a new
+  recorder is started on a source that can cover that freq. This makes sure any of the remaining transmission that it is in the buffer
   of the original recorder gets flushed.
   UPDATED: however if we have 2 different talkgroups on the same freq we should do a stop_call on the original call since it is being used by another TG now. This will let the recorder keep
   going until it gets a termination flag.
@@ -472,6 +472,23 @@ void handle_call_grant(TrunkMessage message, System *sys, bool grant_message, Co
                     superseding_grant = true;
                   }
                 }
+
+                // Finally, if no preferred NAC/site/multiSiteSystemNumber decided the outcome above, fall back to
+                // the site with the stronger rolling average voice-channel signal power. This is a closer proxy for
+                // audio quality than the control-channel decode rate, since it reflects the actual traffic channel
+                // this call would be recorded on rather than just that site's control channel.
+                if (!superseding_grant) {
+                  std::string loghdr = log_header(sys->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), message.freq);
+                  double call_sys_pwr = call->get_system()->get_signal_pwr();
+                  double sys_pwr = sys->get_signal_pwr();
+                  BOOST_LOG_TRIVIAL(trace) << loghdr << "Duplicate Grant Detected.  Original System:" << call->get_system()->get_short_name() << "(Signal Pwr:" << call_sys_pwr << ") New System:" << sys->get_short_name() << "(Signal Pwr:" << sys_pwr << ")";
+                  if (sys_pwr > call_sys_pwr) {
+                    BOOST_LOG_TRIVIAL(info) << loghdr << "New Call System " << sys->get_short_name() << " has stronger signal (" << sys_pwr << ") than Original Call System " << call->get_system()->get_short_name() << " (" << call_sys_pwr << "). Superseding Grant";
+                    superseding_grant = true;
+                  } else {
+                    BOOST_LOG_TRIVIAL(trace) << loghdr << "Original Call System " << call->get_system()->get_short_name() << " has stronger or equal signal (" << call_sys_pwr << ") than New Call System " << sys->get_short_name() << " (" << sys_pwr << "). Ignoring Grant";
+                  }
+                }
               }
             }
           }
@@ -495,7 +512,7 @@ void handle_call_grant(TrunkMessage message, System *sys, bool grant_message, Co
       if (recorder != NULL) {
         recorder_state = format_state(recorder->get_state());
       }
-      std::string loghdr = log_header( call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
+      std::string loghdr = log_header(call->get_short_name(), call->get_call_num(), call->get_talkgroup_display(), call->get_freq());
       BOOST_LOG_TRIVIAL(trace) << loghdr << "\u001b[36mShould be Stopping RECORDING call, Recorder State: " << recorder_state << " RX overlapping TG message Freq, TG:" << message.talkgroup << "\u001b[0m";
     }
 
@@ -685,14 +702,14 @@ void handle_message(std::vector<TrunkMessage> messages, System *sys, Config &con
     {
       //Do not count messages that aren't valid TSBK or MBTs.
       int msg_count = sys->get_message_count();
-      if(msg_count > 1){
+      if (msg_count > 1) {
         sys->set_message_count(msg_count - 1);
       }
       break;
     }
 
     case TDULC:
-      retune_system(sys,tb,sources);
+      retune_system(sys, tb, sources);
       break;
 
     case UNKNOWN:
@@ -787,12 +804,26 @@ void retune_system(System *sys, gr::top_block_sptr &tb, std::vector<Source *> &s
   }
 }
 
-void check_message_count(float timeDiff, Config &config, gr::top_block_sptr &tb, std::vector<Source *> &sources, std::vector<System *> &systems) {
+void check_message_count(float timeDiff, Config &config, gr::top_block_sptr &tb, std::vector<Source *> &sources, std::vector<System *> &systems, std::vector<Call *> &calls) {
   plugman_setup_config(sources, systems);
   plugman_system_rates(systems, timeDiff);
 
+  // For multiSite systems, sample the voice-channel signal power of every actively recording call so that
+  // handle_call_grant() can pick the site with the strongest recent voice-channel signal when a simulcast
+  // duplicate grant appears, rather than relying only on the control-channel decode rate.
+  for (vector<Call *>::iterator it = calls.begin(); it != calls.end(); ++it) {
+    Call *call = *it;
+    if ((call->get_state() == RECORDING) && call->get_system()->get_multiSite()) {
+      Recorder *recorder = call->get_recorder();
+      if ((recorder != NULL) && !recorder->is_idle(call->get_tdma_slot())) {
+        call->get_system()->add_signal_pwr_sample(recorder->get_pwr());
+      }
+    }
+  }
+
   for (std::vector<System *>::iterator it = systems.begin(); it != systems.end(); ++it) {
     System_impl *sys = (System_impl *)*it;
+    sys->calc_signal_pwr();
 
     if ((sys->get_system_type() != "conventional") && (sys->get_system_type() != "conventionalP25") && (sys->get_system_type() != "conventionalDMR") && (sys->get_system_type() != "conventionalSIGMF")) {
       int msgs_decoded_per_second = std::floor(sys->message_count / timeDiff);
@@ -979,7 +1010,7 @@ int monitor_messages(Config &config, gr::top_block_sptr &tb, std::vector<Source 
     float decode_rate_check_time_diff = current_time - last_decode_rate_check;
 
     if (decode_rate_check_time_diff >= 3.0) {
-      check_message_count(decode_rate_check_time_diff, config, tb, sources, systems);
+      check_message_count(decode_rate_check_time_diff, config, tb, sources, systems, calls);
       for (vector<Source *>::iterator src_it = sources.begin(); src_it != sources.end(); src_it++) {
         Source *source = *src_it;
         if (!source->got_samples()) {
